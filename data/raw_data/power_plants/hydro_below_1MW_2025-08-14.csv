@@ -1,0 +1,19 @@
+S No,Project,Capacity (MW),River,Lic No,Isuue Date,Validity,Promoter,Address,Latitiude N 1,Latitiude N 2,Longitude E 1,Longitude E 2,VDC/District,C O D
+1,Syange Khola,0.183,Syange,,0000-00-00,0000-00-00,Syange Vidyut Co Ltd,Lamjung,"00o 00' 00""","00o 00' 00""","00o 00' 00""","00o 00' 00""",,10/10/2058
+2,Pati Khola,0.996,Pati,,0000-00-00,0000-00-00,United Hydropower Company Pvt. Ltd.,Parbat,"00o 00' 00""","00o 00' 00""","00o 00' 00""","00o 00' 00""",,27/10/2065
+3,Belkhu Khola,0.518,Belkhu Khola,,0000-00-00,0000-00-00,Prime Hydropower Co Pvt Ltd,Dhading,"00o 00' 00""","00o 00' 00""","00o 00' 00""","00o 00' 00""",,30/12/2071
+4,Upper Hadi Khola,0.99,Hadi,,0000-00-00,0000-00-00,Centre for Power Dev & Services Pvt Ltd,Kathmandu,"00o 00' 00""","00o 00' 00""","00o 00' 00""","00o 00' 00""",,22/07/2066
+5,Sali Nadi,0.232,Sali Nadi,,0000-00-00,0000-00-00,Kathmandu Small Hydropower Systems Pvt Ltd,Kathmandu,"00o 00' 00""","00o 00' 00""","00o 00' 00""","00o 00' 00""",,01/08/2064
+6,Phewa,1,Seti Khola,1_gtd,06/12/2051,30/11/2101,Nepal Electricity Authority,,"28o 10' 35""","28o 12' 00""","83o 57' 45""","83o 59' 30""",(Kaski),01/01/2026
+7,Seti-II,0.78,Seti Khola,,22/08/2055,0000-00-00,Task Hydropower Co. Pvt. Ltd,,"28o 12' 34""","28o 12' 50""","84o 01' 13""","84o 01' 49""",(Kaski),04/11/2065
+8,Rairang,0.5,Rairang,,24/05/2059,0000-00-00,Rairang Hydropower Development Company Pvt. Ltd,,"00o 00' 00""","00o 00' 00""","00o 00' 00""","00o 00' 00""",(Dhading),01/08/2068
+9,Sisne Khola,0.8,Sisne Khola,,24/03/2060,0000-00-00,Gautam Budha Hydropower Development Company,,"27o 45' 00""","27o 46' 45""","83o 28' 15""","83o 29' 15""",(Palpa),01/06/2064
+10,Chhote khola,0.993,Chhote,,04/07/2060,0000-00-00,Pashupati Environmental Engineering Company Pvt. Ltd.,"Kaldhara, Kathmandu, P.O. Box: 8975 EPC 5308 Phone : 4361915","28o 10' 00""","28o 10' 41""","84o 53' 15""","84o 54' 03""",(Gorkha),09/03/2071
+11,Feme khola,0.995,Pheme,,25/01/2063,0000-00-00,Khoranga Khola Hydropower Development Company Pvt. Ltd.,,"27o 08' 07""","27o 09' 36""","87o 46' 55""","87o 48' 13""",(Panchthar),05/08/2064
+12,Lower Piluwa,0.99,Piluwa Khola,,03/01/2065,0000-00-00,Baneshwor Hydropower P Ltd.,"Baneswor VDC, Sankhuwasabha, Phone 4230887, Fax:4238059","27o 15' 00""","27o 16' 45""","87o 18' 12""","87o 19' 35""",(Sankhuwasabha),01/04/2068
+13,Miya Khola,0.996,Miya,,26/11/2070,0000-00-00,Sapsu Kalika Hydropower Co. Public Ltd.,"Koteshwor, Kathmandu. 01-5100737, 9851005385","27o 10' 24""","27o 11' 30""","86o 49' 22""","86o 49' 51""",(Khotang),03/09/2073
+14,Suspa Bukhari Khola,0.998,Suspa Bukhari Khola,,04/02/2071,0000-00-00,Kutheli Bukhari Small Hydropower,Banepa Kavre,"27o 41' 40""","27o 42' 40""","86o 03' 14""","86o 04' 16""","Susma Chhemawati,Sundrawati,Bhimeshwar Munic (Dolakha)",18/05/2072
+15,Jeuli Gad,0.996,Jeuli and Bauli,,22/03/2072,0000-00-00,Rangunkhola Hydropower Pvt.Ltd.,"P.O.Box 23330, Kathmandu, Phone 01-4377462","29o 34' 50""","29o 36' 25""","81o 08' 38""","81o 10' 00""","Chainpur,Rithapata (Bajhang)",27/08/2076
+16,Thame Small HPP,0.63,Thame Khola,,29/07/2074,0000-00-00,Khumbu Bijuli Company Pvt. Ltd.,"Pasang lamhu VDC, Solukhumbu, Phone no 038540112","27o 49' 15""","27o 50' 00""","86o 38' 37""","86o 40' 40""",Namche (Solukhumbu),29/07/2074
+17,Jhankre Mini HPP,0.635,Jhakre Khola,,17/10/2074,0000-00-00,Khimti Gramin Bidhyut Sahakari Sanstha Limited,"Kirne, Dolakha, Phone no 9844196798","27o 33' 49""","27o 34' 10""","86o 10' 57""","86o 11' 28""","Thulopatal,Hawa (Dolakha)",17/10/2074
+18,Ghatte Khola Small HPP,0.99,Ghatte Khola,,23/11/2075,22/11/2110,Gaun Ghar Ujjyalo Small Hydropower Co Lt.,"Gatthaghar, Bhaktapur, Phone no. 6635391","27o 53' 22""","27o 53' 40""","85o 44' 26""","85o 45' 28""",Golche (Sindhupalchok),13/04/2080

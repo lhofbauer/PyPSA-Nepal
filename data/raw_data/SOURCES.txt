@@ -1,0 +1,53 @@
+File(s): boundaries/*
+Source: geoBoundaries, Individual Country Files: Nepal
+Link: https://www.geoboundaries.org/countryDownloads.html
+Last accessed: 2025-04-24
+License: CC-BY-4.0
+
+File(s): climate/* (not included in GitHub repo)
+Source: Copernicus Climate Change and Atmosphere Monitoring Services, ERA5
+Link: https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview
+Last accessed: –
+License: https://cds.climate.copernicus.eu/cdsapp/#!/terms/licence-to-use-copernicus-products
+
+File(s): hydrobasins/* (not included in GitHub repo)
+Source: HydroSheds, HydroBASINS
+Link: https://www.hydrosheds.org/products/hydrobasins
+Last accessed: 2025-04-24
+License: Open, see website
+
+File(s): power_plants/*
+Source: MoEWRI, Licenses
+Link: https://doed.gov.np/
+Last accessed: 2025-08-14
+License: Undefined
+
+File(s): demand/*
+Source: NEA
+Link: https://opendatanepal.com/en_AU/dataset/?organization=nepal-electricity-authority-nea&res_format=CSV
+Last accessed: –
+License:CC-BY-SA-4.0
+
+File(s): others/population.csv
+Source: National Statistics Office, Population Projections for Nepal, 2021-2051, 2025
+Link: https://censusnepal.cbs.gov.np/results/files/result-folder/Population%20Projections%20for%20Nepal.pdf
+Last accessed: 2026-04-13
+License: –
+
+File(s): others/elec_demand_proj.csv
+Source: National Statistics Office, Population Projections for Nepal, 2021-2051, 2025
+Link: https://giwmscdnone.gov.np/media/pdf_upload/Electricity%20Demand%20Creation%20in%20Different%20Sectors_dk0wcty.pdf
+Last accessed: 2026-04-13
+License: –
+
+File(s): others/technology_params.csv
+Source: Literature
+Link: –
+Last accessed: –
+License: –
+
+
+
+
+
+

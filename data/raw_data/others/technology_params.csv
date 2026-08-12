@@ -1,0 +1,7 @@
+Energy Technology ($/kW),2020,2030,2040,2050,Lifetime (years),Efficiency,Marginal Cost ($/MWh)
+Hydro ROR,1500,1600,1700,1800,50,0.87,0
+Hydro PROR,1800,1900,2000,2100,50,0.87,0
+Hydro Storage,2300,2400,2500,2600,50,0.87,0
+Solar PV,1000,800,740,700,25,1,0
+Wind,1400,1200,1000,900,25,1,0
+Cogeneration,1300,1300,1300,1300,25,0.25,20

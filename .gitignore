@@ -1,0 +1,37 @@
+# Python environment
+envs/*
+env
+venv
+
+!envs/.gitkeep
+!envs/environment.yaml
+
+# Data and results
+results/*
+!results/.gitkeep
+
+data/processed_data/*
+!data/processed_data/.gitkeep
+
+data/network/*
+!data/network/.gitkeep 
+
+data/raw_data/hydrobasins/*
+!data/raw_data/hydrobasins/.gitkeep
+
+data/raw_data/climate/*
+!data/raw_data/climate/.gitkeep
+
+# Editor config
+**/.spyproject/*
+
+# Local bash scripts and others
+
+**/*.sh
+**/DONOTBACKUP*
+
+**/*.png
+**/*.zip
+**/*.pyc
+
+

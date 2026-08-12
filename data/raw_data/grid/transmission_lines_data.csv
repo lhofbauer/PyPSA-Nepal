@@ -1,0 +1,16 @@
+name,bus0,bus1,unused_type,p_nom,p_nom_extendable,p_nom_max,capital_cost,build_year,lifetime,p_min_pu
+Koshi_0-Madhesh_0_built,Koshi_0,Madhesh_0,Al/St 490/64 4-bundle 380.0,4180,False,4180,1000,2010,50,-1
+Bagmati_0-Madhesh_0_built,Bagmati_0,Madhesh_0,Al/St 490/64 4-bundle 380.0,1160,False,1160,1000,2010,50,-1
+Bagmati_0-Madhesh_0_construct,Bagmati_0,Madhesh_0,Al/St 490/64 4-bundle 380.0,0,True,3600,1000,2030,50,-1
+Bagmati_0-Koshi_0_construct,Bagmati_0,Koshi_0,Al/St 490/64 4-bundle 380.0,0,True,2400,1000,2030,50,-1
+Gandaki_0-Bagmati_0_built,Gandaki_0,Bagmati_0,Al/St 490/64 4-bundle 380.0,1390,False,1390,1000,2010,50,-1
+Gandaki_0-Bagmati_0_planned,Gandaki_0,Bagmati_0,Al/St 490/64 4-bundle 380.0,0,True,2000,1000,2040,50,-1
+Gandaki_0-Lumbini_0_built,Gandaki_0,Lumbini_0,Al/St 490/64 4-bundle 380.0,2500,False,2500,1000,2010,50,-1
+Gandaki_0-Lumbini_0_construct,Gandaki_0,Lumbini_0,Al/St 490/64 4-bundle 380.0,0,True,200,1000,2030,50,-1
+Gandaki_0-Lumbini_0_planned,Gandaki_0,Lumbini_0,Al/St 490/64 4-bundle 380.0,0,True,2000,1000,2040,50,-1
+Lumbini_0-Karnali_0_built_added,Lumbini_0,Karnali_0,Al/St 490/64 4-bundle 380.0,2000,False,200,1000,2010,50,-1
+Lumbini_0-Karnali_0_construct,Lumbini_0,Karnali_0,Al/St 490/64 4-bundle 380.0,0,True,200,1000,2030,50,-1
+Lumbini_0-Karnali_0_planned,Lumbini_0,Karnali_0,Al/St 490/64 4-bundle 380.0,0,True,2000,1000,2040,50,-1
+Lumbini_0-Sudurpaschim_0_built,Lumbini_0,Sudurpashchim_0,Al/St 490/64 4-bundle 380.0,200,False,200,1000,2010,50,-1
+Bagmati_0-Lumbini_0_built,Bagmati_0,Lumbini_0,Al/St 490/64 4-bundle 380.0,1050,False,1050,1000,2010,50,-1
+Karnali_0-Sudurpashchim_0_planned,Karnali_0,Sudurpashchim_0,Al/St 490/64 4-bundle 380.0,0,True,2000,1000,2040,50,-1
