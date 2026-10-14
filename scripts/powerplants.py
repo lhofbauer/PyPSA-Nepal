@@ -81,11 +81,17 @@ if __name__ == "__main__":
     path_processed = "../data/processed_data/"
     
     # lever to adjust resolution
+    # FIXME: adjust code to work with district-level resolution
     buses = "provinces" # districts or provinces
     
     # lever for power plant aggregation
     thres = 400 # capacity threshold (MW)
-
+    
+    # levers for generic solar PV and wind (potential not covered by licenses)
+    include_generic_vres = True
+    potential_level = "Laupane-0f"
+    path_solar_potential = "../data/raw_data/others/solar_potential.csv"
+    path_wind_potential = "../data/raw_data/others/wind_potential.csv"
 
     #%% Load and process power plant lists
     
@@ -291,6 +297,7 @@ if __name__ == "__main__":
     pps = pps.drop(columns=["lat","lon"])
     
     #%% separate out power plants with any kind of storage capability
+    
     # hydro plants with any kind of storage
     sto_mask = pps['plant_type'].isin(["pror",
                                         "storage",
@@ -534,9 +541,112 @@ if __name__ == "__main__":
         logger.warning(stor_dupes[['name', 'carrier', 'bus', 'p_nom', 'p_nom_extendable']])
         logger.warning(f"\nDuplicate names: {stor_dupes['name'].unique().tolist()}")
         
-    #%% Add aditional pps based on potentials
+    #%% Add generic solar PV and wind based on resource potential
     
-    # FIXME: add additional option to build solar/etc. to match total potentials
+    if include_generic_vres:
+        
+        # the suffix after the last "-" selects the potential scenario column,
+        # e.g. "Laupane-0f" -> "0f" -> column "potential_0f_MW"
+        level = str(potential_level).rsplit("-", 1)[-1]
+        pot_col = f"potential_{level}_MW"
+        
+        # define carriers (row in technology_params file and potentials file)
+        vres = {
+            "solar": ("Solar PV", path_solar_potential),
+            "wind": ("Wind", path_wind_potential),
+        }
+        
+        periods = pd.read_csv(path_data+"investment_periods.csv")["period"].tolist()
+        periods_df = pd.DataFrame({"period": periods})
+        
+        gc_frames = []
+        
+        for carrier, (cost_key, path_potential) in vres.items():
+            
+            potential = pd.read_csv(path_potential)
+            
+            if pot_col not in potential.columns:
+                raise KeyError(f"Column '{pot_col}' not found in {path_potential}. "
+                               f"Available columns: {potential.columns.tolist()}")
+            
+            potential["bus"] = potential["province"].astype(str) + "_0"
+            
+            # capacity already allocated through licensed current/future projects
+            # (or their aggregation), which consumes part of the technical
+            # potential and is therefore excluded from the generic potential.
+            # PyPSA's capacity expansion limit only sums up extendable assets, 
+            # so "existing" and "future" (licensed) are tracked
+            # separately: both are excluded from the per-period generic tech
+            # potentials, but only "existing" is substracted off the cumulative
+            # cap constant.
+            
+            vres_pp = pps.loc[pps["carrier"]==carrier]
+            existing = (vres_pp.loc[~vres_pp["p_nom_extendable"], ["bus","p_nom"]]
+                        .set_index("bus")["p_nom"])
+            future = (vres_pp.loc[vres_pp["p_nom_extendable"], ["bus","p_nom_max"]]
+                        .set_index("bus")["p_nom_max"].fillna(0))
+            by_bus = pd.DataFrame({"existing": existing, "future": future})
+            by_bus["licensed"] = by_bus["existing"].add(by_bus["future"], fill_value=0)
+            
+            potential = potential.join(by_bus[["existing", "licensed"]], on="bus")
+            potential[["existing", "licensed"]] = potential[["existing",
+                                                               "licensed"]].fillna(0.0)
+            
+            # per-period generic potential (licensed capacity removed) and 
+            # constraint potential (only already installed capacity removed)
+            potential["pot_generic"] = (potential[pot_col] - potential["licensed"]).clip(lower=0)
+            potential["pot_constraint"] = (potential[pot_col] - potential["existing"]).clip(lower=0)
+            
+            lifetime = tech_costs_per_kw.loc[cost_key, "Lifetime (years)"]
+            capex_by_period = {period: annualize_cost(tech_costs_per_kw.loc[cost_key,
+                                                                            str(period)],
+                                                      discount_rate,
+                                                      lifetime)
+                               for period in periods}
+            
+            # add one extendable vintage per province and investment period
+            vintage = potential.merge(periods_df, how="cross")
+            
+            generic = pd.DataFrame({
+                "name": (vintage["bus"] + " " + carrier + " potential "
+                         + vintage["period"].astype(str)),
+                "p_nom": 0.0,
+                "build_year": vintage["period"],
+                "bus": vintage["bus"],
+                "carrier": carrier,
+                "lifetime": lifetime,
+                "capital_cost": vintage["period"].map(capex_by_period),
+                "marginal_cost": tech_costs_per_kw.loc[cost_key, "Marginal Cost ($/MWh)"],
+                "efficiency": tech_costs_per_kw.loc[cost_key, "Efficiency"],
+                "p_nom_extendable": True,
+                "p_nom_min": 0.0,
+                "p_nom_max": vintage["pot_generic"],
+            })
+            pps = pd.concat([pps, generic], ignore_index=True)
+            
+            # cumulative cap across all vintages (one per province/carrier)
+            gc_frames.append(pd.DataFrame({
+                "name": potential["bus"] + " " + carrier + " potential limit",
+                "type": "tech_capacity_expansion_limit",
+                "carrier_attribute": carrier,
+                "sense": "<=",
+                "constant": potential["pot_constraint"],
+                "bus": potential["bus"],
+            }))
+            
+            logger.info(f"Added generic {carrier} technologies with a "
+                        f"total potential of "
+                        f"{potential['pot_constraint'].sum():.0f} MW.")
+        
+        pd.concat(gc_frames, ignore_index=True).to_csv(path_data+"global_constraints.csv",
+                                                       index=False)
+    
+    else:
+        
+        # avoid stale potential limits from a previous run
+        gc_path = path_data+"global_constraints.csv"
+        if os.path.exists(gc_path):
+            os.remove(gc_path)
     
     #%% Save input data
     pps.to_csv(path_data+"generators.csv",index=False)

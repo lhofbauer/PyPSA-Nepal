@@ -46,6 +46,12 @@ Link: –
 Last accessed: –
 License: –
 
+File(s): others/[solar/wind]_potential.csv
+Source: Neupane, Deependra, Sagar Kafle, Kaji Ram Karki, Dae Hyun Kim, and Prajal Pradhan. ‘Solar and Wind Energy Potential Assessment at Provincial Level in Nepal: Geospatial and Economic Analysis’. Renewable Energy 181 (January 2022): 278–91.
+Link: https://doi.org/10.1016/j.renene.2021.09.027
+Last accessed: 2026-10-13
+License: –
+
 
 
 
