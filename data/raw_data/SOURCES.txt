@@ -52,6 +52,18 @@ Link: https://doi.org/10.1016/j.renene.2021.09.027
 Last accessed: 2026-10-13
 License: –
 
+File(s): landcover/copernicus_landcover.tif
+Source: Copernicus GDLC
+Link: https://doi.org/10.2909/c6377c6e-76cc-4d03-8330-628a03693042
+Last accessed: 2026-10-26
+License: CLMS open license
+
+File(s): data/raw_data/grid/pre_built/*
+Source: Placeholder data based on Nepal Power Transmission Network Map 2040, Rastriya Prasaran Grid Company Limited (currently not included in GitHub repo)
+Link: NA
+Last accessed: NA
+License: NA
+
 
 
 

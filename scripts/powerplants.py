@@ -7,14 +7,19 @@ Copyright (C) 2026 PyPSA-Nepal contributors, licensed under a MIT license
 
 
 import os
+from functools import partial
 
 import pandas as pd
 import geopandas as gpd
 import logging
-
+import numpy as np
+import rasterio
+from atlite.gis import ExclusionContainer, shape_availability
+import nepali_datetime
+      
 pd.set_option('future.no_silent_downcasting', True)
 
-import nepali_datetime
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -75,23 +80,44 @@ if __name__ == "__main__":
 
     #%% Levers and macros ###
 
-    # FIXME: move to config
+    # FIXME: refine and move to config
     path_data = "../data/network/"
     path_pp = "../data/raw_data/power_plants/" 
     path_processed = "../data/processed_data/"
     
-    # lever to adjust resolution
-    # FIXME: adjust code to work with district-level resolution
-    buses = "provinces" # districts or provinces
+    path_bus_regions = "bus_regions.shp"
     
     # lever for power plant aggregation
     thres = 400 # capacity threshold (MW)
     
     # levers for generic solar PV and wind (potential not covered by licenses)
     include_generic_vres = True
-    potential_level = "Laupane-0f"
     path_solar_potential = "../data/raw_data/others/solar_potential.csv"
     path_wind_potential = "../data/raw_data/others/wind_potential.csv"
+
+    path_landcover = "../data/raw_data/landcover/copernicus_landcover.tif"
+    path_protected_areas = None  # optional vector file, ignored if None
+    path_slope = None  # optional raster in degrees, required if max_slope is set
+    potential_area_crs = "+proj=laea +lat_0=28 +lon_0=84 +datum=WGS84 +units=m +no_defs"
+    potential_resolution = 100  # metres
+    # power density needs to be provided in MW per eligible km2.
+    # FIXME: placeholder config, to be replaced
+    potential_grid_settings = {
+        "solar": {"capacity_per_sqkm": 4.6,
+                  "land_cover_codes": [20, 30, 40, 50, 60, 90, 100],
+                  "settlement_buffer": 0,
+                  "max_slope": None},
+        "wind": {"capacity_per_sqkm": 3.0,
+                 "land_cover_codes": [20, 30, 40, 60, 100,
+                                      111, 112, 113, 114, 115, 116,
+                                      121, 122, 123, 124, 125, 126],
+                 "settlement_buffer": 1000,
+                 "max_slope": None},
+    }
+    scale_potentials_to_total = True
+    # gross technical totals, including licensed projects: a number specifies MW;
+    # "Laupane-0f" / "Laupane-0.75f" takes totals from Laupane et al.
+    potential_national_totals = {"solar": "Laupane-0f", "wind": "Laupane-0f"}
 
     #%% Load and process power plant lists
     
@@ -200,23 +226,14 @@ if __name__ == "__main__":
     # locate area in model region
     pps_gdf = gpd.GeoDataFrame(pps,geometry=gpd.points_from_xy(pps.lon,pps.lat),
                                crs="EPSG:4326")
+    areas = gpd.read_file(path_processed+path_bus_regions)
     
-    if buses == "provinces":
-        areas = gpd.read_file("../data/raw_data/boundaries/geoBoundaries-NPL-ADM1-all/geoBoundaries-NPL-ADM1_simplified.shp")
-        areas.loc[:,"shapeName"] = areas.loc[:,"shapeName"].replace({"Province 1":"Koshi",
-                                                                     "Province 2":"Madhesh",
-                                                                     "Sudurpaschim":"Sudurpashchim"})
-    elif buses == "districts":
-        areas = gpd.read_file("../data/raw_data/boundaries/geoBoundaries-NPL-ADM2-all/geoBoundaries-NPL-ADM2_simplified.shp")
-    else:
-        raise ValueError(f"'{buses}' not defined as value for resolution.")
-        
     areas = areas.to_crs("EPSG:4326")
     # spatial join nearest --> each power plant point, it finds the nearest
     # administrative boundary polygon and joins the boundary's attributes
     # to the power plant record
     pps_gdf = pps_gdf.sjoin_nearest(areas, how="left") 
-    pps_gdf.loc[:,"bus"] = pps_gdf.loc[:,"shapeName"]+"_0" # defines bus
+    pps_gdf.loc[:,"bus"] = pps_gdf.loc[:,"id"] # defines bus
     # extract only the required columns 
     pps = pps_gdf.loc[:,["name","p_nom","build_year","lat","lon","bus","carrier","plant_type"]].copy()
     # ensures build_year is an integer for proper calculation
@@ -545,108 +562,134 @@ if __name__ == "__main__":
     
     if include_generic_vres:
         
-        # the suffix after the last "-" selects the potential scenario column,
-        # e.g. "Laupane-0f" -> "0f" -> column "potential_0f_MW"
-        level = str(potential_level).rsplit("-", 1)[-1]
-        pot_col = f"potential_{level}_MW"
-        
-        # define carriers (row in technology_params file and potentials file)
-        vres = {
-            "solar": ("Solar PV", path_solar_potential),
-            "wind": ("Wind", path_wind_potential),
-        }
-        
+        # setting up data structures and iterations
+        vres = {"solar": ("Solar PV", path_solar_potential),
+                "wind": ("Wind", path_wind_potential)}
         periods = pd.read_csv(path_data+"investment_periods.csv")["period"].tolist()
         periods_df = pd.DataFrame({"period": periods})
+        potentials = {}
+        pp_generic, gc = [], []
+
+        regions = areas.set_index("id").to_crs(potential_area_crs)
         
-        gc_frames = []
+        # load layers
+        protected = (gpd.read_file(path_protected_areas)
+                     if path_protected_areas is not None else None)
+        if protected is None:
+            logger.warning("VRE potentials: protected-area exclusions are disabled.")
         
-        for carrier, (cost_key, path_potential) in vres.items():
+        landcover = rasterio.open(path_landcover) 
+
+        slope = (rasterio.open(path_slope)
+                     if path_slope is not None else None)
+        if slope is None:
+            logger.warning("VRE potentials: slope is not considered.")
             
-            potential = pd.read_csv(path_potential)
+        # iterating through wind/solar estimating potentials based on land
+        # availability, scaled to totals if triggered
+        for carrier, (_, path_potential) in vres.items():
             
-            if pot_col not in potential.columns:
-                raise KeyError(f"Column '{pot_col}' not found in {path_potential}. "
-                               f"Available columns: {potential.columns.tolist()}")
+            settings = potential_grid_settings[carrier]
+            excluder = ExclusionContainer(crs=regions.crs, res=potential_resolution)
             
-            potential["bus"] = potential["province"].astype(str) + "_0"
+            # setting included (invert=True) or excluded land cover types/areas 
+            # based on config
+            excluder.add_raster(landcover, codes=settings["land_cover_codes"], invert=True, nodata=0)
+            if settings["settlement_buffer"] > 0:
+                excluder.add_raster(landcover, codes=[50], buffer=settings["settlement_buffer"], nodata=0)
+            if protected is not None and not protected.empty:
+                excluder.add_geometry(protected)
+            if settings["max_slope"] is not None:
+                if slope is None:
+                    raise ValueError(f"{carrier} max_slope requires a slope raster.")
+                excluder.add_raster(slope, codes=partial(np.less, settings["max_slope"]), nodata=255)
+
             
-            # capacity already allocated through licensed current/future projects
-            # (or their aggregation), which consumes part of the technical
-            # potential and is therefore excluded from the generic potential.
-            # PyPSA's capacity expansion limit only sums up extendable assets, 
-            # so "existing" and "future" (licensed) are tracked
-            # separately: both are excluded from the per-period generic tech
-            # potentials, but only "existing" is substracted off the cumulative
-            # cap constant.
+            # calculate capacity potentials
+            capacities = []
+            for bus in regions.index:
+                eligible, transform = shape_availability(regions.loc[[bus]].geometry, excluder)
+                area_km2 = eligible.sum() * excluder.res**2 /1e6
+                capacities.append(area_km2 * settings["capacity_per_sqkm"])
+            potential = pd.DataFrame({"bus": regions.index, "potential_MW": capacities})
+            raw_total = potential["potential_MW"].sum()
+            logger.info(f"Unscaled technical potential for {carrier}: {raw_total:.2f} MW.")
             
-            vres_pp = pps.loc[pps["carrier"]==carrier]
-            existing = (vres_pp.loc[~vres_pp["p_nom_extendable"], ["bus","p_nom"]]
-                        .set_index("bus")["p_nom"])
-            future = (vres_pp.loc[vres_pp["p_nom_extendable"], ["bus","p_nom_max"]]
-                        .set_index("bus")["p_nom_max"].fillna(0))
-            by_bus = pd.DataFrame({"existing": existing, "future": future})
-            by_bus["licensed"] = by_bus["existing"].add(by_bus["future"], fill_value=0)
+            # scale to total if triggered
+            # FIXME: should this take into account the licensed power plants,
+            # i.e., scale to total - [capacity of licensed power plants]?
+            if scale_potentials_to_total:
+                target = potential_national_totals.get(carrier)
+                if target is None:
+                    logger.warning(f"No national {carrier} potential provided; retaining unscaled grid potential.")
+                else:
+                    if isinstance(target, str):
+                        if not target.startswith("Laupane-") or not target.endswith("f"):
+                            raise ValueError(f"Unknown {carrier} potential scenario: {target}; use 'Laupane-Xf'.")
+                        level = target.removeprefix("Laupane-")
+                        target = pd.read_csv(path_potential)[f"potential_{level}_MW"].sum(skipna=False)
+                    if not np.isfinite(target) or target < 0:
+                        raise ValueError(f"National {carrier} potential must be finite and nonnegative.")
+                    if raw_total == 0 and target > 0:
+                        raise ValueError(f"Cannot allocate {target} MW of {carrier}: no eligible area.")
+                    factor = target / raw_total if raw_total > 0 else 0.0
+                    potential["potential_MW"] *= factor
+                    logger.info(f"Grid {carrier}: scaling factor {factor:.6g}, national total {target:.2f} MW.")
+                    if factor > 1:
+                        logger.warning(f"Scaled {carrier} potential exceeds the initial density-based estimate.")
+            potentials[carrier] = potential
+
+        # create generators and cumulative limits
+        for carrier, (cost_key, _) in vres.items():
+            potential = potentials[carrier]
+            vres_pp = pps.loc[pps["carrier"] == carrier]
+            existing = vres_pp.loc[~vres_pp["p_nom_extendable"]].groupby("bus")["p_nom"].sum()
+            future = vres_pp.loc[vres_pp["p_nom_extendable"]].groupby("bus")["p_nom_max"].sum()
+            potential["existing"] = potential["bus"].map(existing).fillna(0.0)
+            potential["licensed"] = potential["existing"] + potential["bus"].map(future).fillna(0.0)
             
-            potential = potential.join(by_bus[["existing", "licensed"]], on="bus")
-            potential[["existing", "licensed"]] = potential[["existing",
-                                                               "licensed"]].fillna(0.0)
-            
-            # per-period generic potential (licensed capacity removed) and 
-            # constraint potential (only already installed capacity removed)
-            potential["pot_generic"] = (potential[pot_col] - potential["licensed"]).clip(lower=0)
-            potential["pot_constraint"] = (potential[pot_col] - potential["existing"]).clip(lower=0)
-            
+            # check for conflicts, i.e., licensed higher than calculated potential
+            excess = potential["licensed"] > potential["potential_MW"]
+            if excess.any():
+                logger.warning(f"Licensed {carrier} capacity exceeds technical potential at buses: "
+                                 + ", ".join(potential.loc[excess, "bus"].astype(str)))
+            # Calculate relevant potentials, note the cumulative expansion limit
+            # includes future licenses, but not existing assets.
+            potential["pot_generic"] = (potential["potential_MW"] - potential["licensed"]).clip(lower=0)
+            potential["pot_constraint"] = (potential["potential_MW"] - potential["existing"]).clip(lower=0)
+
             lifetime = tech_costs_per_kw.loc[cost_key, "Lifetime (years)"]
-            capex_by_period = {period: annualize_cost(tech_costs_per_kw.loc[cost_key,
-                                                                            str(period)],
-                                                      discount_rate,
-                                                      lifetime)
-                               for period in periods}
-            
-            # add one extendable vintage per province and investment period
+            capex_by_period = {
+                period: annualize_cost(tech_costs_per_kw.loc[cost_key, str(period)],
+                                       discount_rate, lifetime)
+                for period in periods
+            }
             vintage = potential.merge(periods_df, how="cross")
-            
-            generic = pd.DataFrame({
+            # arrange generic power plant data
+            pp_generic.append(pd.DataFrame({
                 "name": (vintage["bus"] + " " + carrier + " potential "
                          + vintage["period"].astype(str)),
-                "p_nom": 0.0,
-                "build_year": vintage["period"],
-                "bus": vintage["bus"],
-                "carrier": carrier,
-                "lifetime": lifetime,
+                "p_nom": 0.0, "build_year": vintage["period"],
+                "bus": vintage["bus"], "carrier": carrier, "lifetime": lifetime,
                 "capital_cost": vintage["period"].map(capex_by_period),
                 "marginal_cost": tech_costs_per_kw.loc[cost_key, "Marginal Cost ($/MWh)"],
                 "efficiency": tech_costs_per_kw.loc[cost_key, "Efficiency"],
-                "p_nom_extendable": True,
-                "p_nom_min": 0.0,
+                "p_nom_extendable": True, "p_nom_min": 0.0,
                 "p_nom_max": vintage["pot_generic"],
-            })
-            pps = pd.concat([pps, generic], ignore_index=True)
-            
-            # cumulative cap across all vintages (one per province/carrier)
-            gc_frames.append(pd.DataFrame({
-                "name": potential["bus"] + " " + carrier + " potential limit",
-                "type": "tech_capacity_expansion_limit",
-                "carrier_attribute": carrier,
-                "sense": "<=",
-                "constant": potential["pot_constraint"],
-                "bus": potential["bus"],
             }))
-            
-            logger.info(f"Added generic {carrier} technologies with a "
-                        f"total potential of "
-                        f"{potential['pot_constraint'].sum():.0f} MW.")
-        
-        pd.concat(gc_frames, ignore_index=True).to_csv(path_data+"global_constraints.csv",
+            # arrange global constraint
+            gc.append(pd.DataFrame({
+                "name": potential["bus"] + " " + carrier + " potential limit",
+                "type": "tech_capacity_expansion_limit", "carrier_attribute": carrier,
+                "sense": "<=", "constant": potential["pot_constraint"], "bus": potential["bus"],
+            }))
+            logger.info(f"Added generic {carrier} potential: {potential['pot_generic'].sum():.2f} MW "
+                        f"remaining, cumulative expansion limit {potential['pot_constraint'].sum():.2f} MW.")
+
+        pps = pd.concat([pps, *pp_generic], ignore_index=True)
+        pd.concat(gc, ignore_index=True).to_csv(path_data+"global_constraints.csv",
                                                        index=False)
     
-    else:
-        
-        # avoid stale potential limits from a previous run
-        gc_path = path_data+"global_constraints.csv"
-        if os.path.exists(gc_path):
-            os.remove(gc_path)
     
     #%% Save input data
     pps.to_csv(path_data+"generators.csv",index=False)

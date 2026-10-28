@@ -19,19 +19,26 @@ data/network/*
 data/raw_data/hydrobasins/*
 !data/raw_data/hydrobasins/.gitkeep
 
+data/raw_data/grid/pre_built/*
+!data/raw_data/grid/pre_built/.gitkeep
+
 data/raw_data/climate/*
 !data/raw_data/climate/.gitkeep
 
-# Editor config
+# Editor and other config 
 **/.spyproject/*
+AGENTS.md
+**/*opencode*
 
 # Local bash scripts and others
 
 **/*.sh
 **/DONOTBACKUP*
 
+**/__pycache__/*
 **/*.png
 **/*.zip
 **/*.pyc
 
-
+tests/*
+!tests/.gitkeep

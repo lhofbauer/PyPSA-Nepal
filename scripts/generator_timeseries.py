@@ -22,9 +22,8 @@ if __name__ == "__main__":
     path_hyd_coords = "../data/processed_data/all_hydro_coords.csv"
     path_processed = "../data/processed_data/"
     
-    # FIXME: levers to be implemented, currently not working/tested
-    # lever to adjust resolution
-    buses = "provinces" # districts or provinces
+    path_bus_regions = "bus_regions.shp"
+    
 
     #%% Get cutouts and shapefiles
     
@@ -48,18 +47,7 @@ if __name__ == "__main__":
     
     # get shapefiles
     
-    if buses == "provinces":
-        areas = gpd.read_file("../data/raw_data/boundaries/geoBoundaries-NPL-ADM1-all/geoBoundaries-NPL-ADM1_simplified.shp")
-        areas.loc[:,"shapeName"] = areas.loc[:,"shapeName"].replace({"Province 1":"Koshi",
-                                                                     "Province 2":"Madhesh",
-                                                                     "Sudurpaschim":"Sudurpashchim"})
-        areas.loc[:,"shapeName"] = areas.loc[:,"shapeName"]+"_0" #Is this necessary?
-    elif buses == "districts": 
-        #Not used for now, but could be used in future for more detailed resolution
-        areas = gpd.read_file("../data/raw_data/boundaries/geoBoundaries-NPL-ADM2-all/geoBoundaries-NPL-ADM2_simplified.shp")
-    else:
-        raise ValueError(f"'{buses}' not defined as value for resolution.")
-        
+    areas = gpd.read_file(path_processed+path_bus_regions)
     basins = gpd.read_file("../data/raw_data/hydrobasins/hybas_as_lev01-12_v1c/hybas_as_lev08_v1c.shp")
     
     
@@ -91,17 +79,17 @@ if __name__ == "__main__":
         crs='EPSG:4326'
     )
     
-    within_provinces = gpd.sjoin(coords_gdf, areas,
+    within_areas = gpd.sjoin(coords_gdf, areas,
                                  how='inner', predicate='dwithin',
                                  distance=2)
-    plants_within = within_provinces.index.unique()
+    plants_within = within_areas.index.unique()
     
     # Filter out invalid coordinates
     final_coords = all_hydro_coords.loc[plants_within].copy()
     excluded_coords = all_hydro_coords.loc[~all_hydro_coords.index.isin(plants_within)]
     
     if len(excluded_coords) > 0:
-        logger.warning(f"Excluded {len(excluded_coords)} plants that fall outside province boundaries.")
+        logger.warning(f"Excluded {len(excluded_coords)} plants that fall outside area boundaries.")
         for idx in excluded_coords.index[:5]:  # Show first 5
             row = excluded_coords.loc[idx]
             logger.warning(f"  {idx}: lat={row['lat']:.4f}, lon={row['lon']:.4f}")
@@ -236,7 +224,7 @@ if __name__ == "__main__":
     # calculate wind capacity factors
     wind_cf = cutout.wind(turbine="Vestas_V90_3MW",
                           shapes=areas,
-                          index=pd.Index(areas["shapeName"],
+                          index=pd.Index(areas["id"],
                                          name="GEOGRAPHY"),
                           per_unit=True)
     wind_cf = wind_cf.to_pandas()
@@ -252,7 +240,7 @@ if __name__ == "__main__":
     pv_cf = cutout.pv(panel="CSi",
                       orientation="latitude_optimal",
                       shapes=areas,
-                      index=pd.Index(areas["shapeName"],
+                      index=pd.Index(areas["id"],
                                       name="GEOGRAPHY"),
                       per_unit=True
                       )

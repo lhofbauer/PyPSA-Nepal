@@ -10,6 +10,7 @@ import re
 
 import pandas as pd
 import numpy as np
+import geopandas as gpd
 
 pd.set_option('future.no_silent_downcasting', True)
 
@@ -37,11 +38,9 @@ if __name__ == "__main__":
     path_processed = "../data/processed_data/"
     
     
-    
-    # lever to adjust resolution
-    # FIXME: levers currently not entirely operational, i.e., changes are 
-    # probably breaking the model, but likely only needs minor adjustments to fix
-    buses = "provinces" # districts or provinces
+
+
+    path_bus_regions = "bus_regions.shp"
     snapshot_years = [2020, 2030, 2040, 2050] 
 
 #%% Load and process demand data
@@ -176,34 +175,46 @@ if __name__ == "__main__":
     
     ### split demand across buses
     
-    # load population data
-    doc = fitz.open(path_pop_proj)
+    # FIXME: Temporarily removed to add flexible but basic estimate based on
+    # area (to handle flexible spatial resolutions). This should use geospatial
+    # demand data to disaggregate national or regional totals.
+    # # load population data
+    # doc = fitz.open(path_pop_proj)
     
-    # lists to hold data extracted from population pdf
-    names = []
-    population = []
+    # # lists to hold data extracted from population pdf
+    # names = []
+    # population = []
     
-    # FIXME: take into account projections, not only single year,
-    # iterating through pages of interest to extract population info
-    for i in range(203,210):
-        page = doc[i]
-        page.set_rotation(90) #table is sideways in pdf
-        try:
-            tabs = page.find_tables()
-            tab = tabs[0]
-            intermediary_df = tab.to_pandas()
-            name = intermediary_df["Province\nand age\ngroups"][1]
-            names.append(name+"_0") 
-            pop = intermediary_df["2041"][2]
-            pop = float(pop.replace(',', ''))
-            population.append(pop)
-        except:
-            logger.error(i)
+    # # FIXME: take into account projections, not only single year,
+    # # iterating through pages of interest to extract population info
+    # for i in range(203,210):
+    #     page = doc[i]
+    #     page.set_rotation(90) #table is sideways in pdf
+    #     try:
+    #         tabs = page.find_tables()
+    #         tab = tabs[0]
+    #         intermediary_df = tab.to_pandas()
+    #         name = intermediary_df["Province\nand age\ngroups"][1]
+    #         names.append(name+"_0") 
+    #         pop = intermediary_df["2041"][2]
+    #         pop = float(pop.replace(',', ''))
+    #         population.append(pop)
+    #     except:
+    #         logger.error(i)
     
-    # zip lists into population dataframe
-    pop_df = pd.DataFrame(zip(names,population), columns= ['Bus','Population'])
-    pop_df = pop_df.set_index("Bus")
-    # convert to proportions (percentages of total population)
+    # # zip lists into population dataframe
+    # pop_df = pd.DataFrame(zip(names,population), columns= ['Bus','Population'])
+    # pop_df = pop_df.set_index("Bus")
+    # # convert to proportions (percentages of total population)
+    # pop_df = pop_df/pop_df.sum()
+    
+    # simply take area to split demand (see fixme above)
+    areas = gpd.read_file(path_processed+path_bus_regions)
+    areas.loc[:,"area"] = areas.area
+    
+    pop_df = areas.loc[:,["id","area"]]
+    pop_df.columns = ["id","Population"]
+    pop_df = pop_df.set_index("id")
     pop_df = pop_df/pop_df.sum()
     
     ### calculate demand for each province as fraction of total

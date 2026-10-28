@@ -36,7 +36,7 @@ logger.info(issues)
 # %% Run model (optimization)
 
 # Choose year
-year = 2050
+year = 2040
 periods = n.snapshots[n.snapshots.get_level_values("period").isin([year])]
 
 
@@ -44,7 +44,7 @@ periods = n.snapshots[n.snapshots.get_level_values("period").isin([year])]
 res = 3
 # Select weeks to reduce complexity for testing
 s = 8
-e = 35
+e = 9
 #snap = periods[168 * s : 168 * e : res]
 n.set_snapshots(periods[168 * s : 168 * e : res])
 n.snapshot_weightings.loc[:, :] = res
