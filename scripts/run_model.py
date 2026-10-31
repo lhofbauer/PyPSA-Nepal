@@ -6,7 +6,6 @@ Copyright (C) 2026 PyPSA-Nepal contributors, licensed under a MIT license
 """
 
 import logging
-import os
 
 import pandas as pd
 

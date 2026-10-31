@@ -41,12 +41,13 @@ line_s_max_pu = 1.0
 
 path_output = root / "data/network"
 path_processed = root / "data/processed_data"
-# FIXME: to be used in future, currently unused
-path_prov_shapefile = root / "data/raw_data/boundaries/geoBoundaries-NPL-ADM1-all/geoBoundaries-NPL-ADM1_simplified.shp"
+
+path_busreg_shapefile = root / "data/raw_data/boundaries/geoBoundaries-NPL-ADM1-all/geoBoundaries-NPL-ADM1_simplified.shp"
 
 
 # "full", "clustering" (k-means), or "custom" (provided region polygons).
-processing = "full"
+processing = "custom"
+add_synthetic_buses = False
     
     #%% Worker functions
 
@@ -222,12 +223,15 @@ if __name__ == "__main__":
         line_extendable=line_extendable, line_s_max_pu=line_s_max_pu,
     )
 
-    # %% Process buses and their areas
+    # %% Process buses and derive bus regions
     if processing == "full":
         regions = build_voronoi_regions(buses, boundary)
+        
     elif processing == "clustering":
         # TODO: cluster buses with k-means, then create Voronoi territories.
+        # potentially integrate with "custom" as these should partly use similar
         raise NotImplementedError("K-means clustering is not implemented yet.")
+        
     elif processing == "custom":
         
         # if buses == "provinces":
@@ -240,9 +244,128 @@ if __name__ == "__main__":
         # else:
         #     raise ValueError(f"'{buses}' not defined as value for resolution.")
         
+        # load regions to be used
+        regions = gpd.read_file(path_busreg_shapefile)
+        regions = regions.to_crs(boundary.estimate_utm_crs())[["geometry"]]
+        regions = regions.reset_index(drop=True)
         
-        # TODO: aggregate buses to supplied regions; add/connect missing buses.
-        raise NotImplementedError("Custom region clustering is not implemented yet.")
+        regions["id"] = "region_" + regions.index.astype(str)
+   
+        # assign each original bus to one region
+        busmap = buses[["id", "geometry"]].to_crs(regions.crs)
+        busmap = busmap.sjoin_nearest(regions.rename(columns={"id": "region"}))
+        busmap = busmap.sort_values(["id", "region"])
+        busmap = busmap.drop_duplicates("id")
+        busmap = busmap.set_index("id")["region"]
+        
+        # merge regions without buses if no synthetic buses to be added
+        if not add_synthetic_buses:
+            regions = regions.set_index("id")
+            allocated = pd.Index(busmap.unique())
+            remaining = regions.index.difference(allocated)
+            
+            if not remaining.empty:
+                logger.warning("Not every supplied bus region has a bus"
+                               " allocated. The following regions are merged"
+                               f" onto others: {remaining}. Set"
+                               " add_synthetic_buses to True to create buses"
+                               " for each bus region.")
+            while not remaining.empty:
+                borders = pd.DataFrame({
+                    region: regions.loc[allocated].boundary.intersection(
+                        regions.at[region, "geometry"].boundary
+                    ).length
+                    for region in remaining
+                })
+                neighbour, region = borders.stack().idxmax()
+                if borders.loc[neighbour, region] <= 0:
+                    raise ValueError(
+                        "Remaining regions without bus have no shared border "
+                        "with populated regions."
+                    )
+               
+                regions.at[neighbour, "geometry"] = (
+                    regions.at[neighbour, "geometry"]
+                    .union(regions.at[region, "geometry"])
+                )
+                regions = regions.drop(region)
+                remaining = remaining.drop(region)
+               
+            regions = regions.reset_index()
+            
+            
+        # create one bus per polygon, including polygons without any
+        # matched bus (if desired)
+        points = regions.set_index("id").representative_point()
+        bus_table = prepare_buses(
+            regions.set_geometry(regions.representative_point()),
+            network_voltage,
+        )
+        
+        # process lines to represent transmission corridors between regions
+        corridors = line_table.assign(
+            bus0=line_table.bus0.map(busmap),
+            bus1=line_table.bus1.map(busmap),
+        )
+        corridors[["bus0", "bus1"]] = np.sort(
+            corridors[["bus0", "bus1"]].to_numpy(), axis=1,
+        )
+        corridors = corridors.loc[
+            corridors.bus0 != corridors.bus1
+        ].copy()
+   
+        # aggregate lines to corridors, length is capacity-weighted
+        # average
+        # FIXME: consider if this aggregation is accurate in terms of
+        # the resulting capacity
+        corridors["length"] *= corridors["s_nom"]
+        line_table = corridors.groupby(
+            ["bus0", "bus1"], as_index=False,
+        ).agg({
+            "s_nom": "sum", "s_nom_min": "sum",
+            "num_parallel": "sum", "length": "sum",
+        })
+        line_table["length"] /= line_table["s_nom"]
+        
+           
+        if add_synthetic_buses:
+            # connect each synthetic bus directly or indirectly to a populated
+            # regional bus
+            
+            circuit_rating = (
+                np.sqrt(3) * network_voltage
+                * pypsa.Network().line_types.at[line_type, "i_nom"]
+            )
+            populated = points.loc[busmap.unique()]
+            remaining = points.index.difference(populated.index)
+            while not remaining.empty:
+               distances = pd.DataFrame({
+                   bus: populated.distance(points.loc[bus])
+                   for bus in remaining
+               })
+               neighbour, bus = distances.stack().idxmin()
+               
+               line_table.loc[len(line_table)] = {
+                   "bus0": bus, "bus1": neighbour,
+                   "s_nom": circuit_rating, "s_nom_min": circuit_rating,
+                   "num_parallel": 1.0,
+                   "length": distances.loc[neighbour, bus] / 1000,
+               }
+               populated = points.loc[populated.index.union([bus])]
+               remaining = remaining.drop(bus)
+
+        # calculate and add parameters (removed in groupby before)
+        line_table = line_table.assign(
+            carrier="AC", type=line_type,
+            s_nom_extendable=line_extendable,
+            s_max_pu=line_s_max_pu, lifetime=line_life,
+            capital_cost=line_cost * line_table["length"] * 1000,
+        )
+        line_table.index = pd.Index(
+            "corridor_" + line_table.index.astype(str), name="name",
+        )
+        regions = regions[["id", "geometry"]].to_crs("EPSG:4326")
+        
     else:
         raise ValueError(f"Unknown processing option: {processing}")
 
