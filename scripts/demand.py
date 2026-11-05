@@ -7,16 +7,17 @@ Copyright (C) 2026 PyPSA-Nepal contributors, licensed under a MIT license
 import os
 import logging
 import re
+from functools import cache
 
 import pandas as pd
 import numpy as np
 import geopandas as gpd
+import rasterio
+from rasterio.mask import mask as raster_mask
+
 
 pd.set_option('future.no_silent_downcasting', True)
 
-import fitz  # import PyMuPDF
-if not hasattr(fitz.Page, "find_tables"):
-    raise RuntimeError("This PyMuPDF version does not support the table feature")
 
 import nepali_datetime
 
@@ -38,8 +39,20 @@ if __name__ == "__main__":
     path_processed = "../data/processed_data/"
     
     
-
-
+    
+    path_dem_shapefile = None  # Filepath or None
+    path_subn_dem_data = None # None or path to file with respective demand for one or several years
+    path_raster_gdp = "../data/raw_data/gdp/rast_gdpTot_1990_2024_5arcmin.tif"
+    paths_raster_pop = {
+                    year: (
+                        "../data/raw_data/population/"
+                        f"npl_pop_{year}_CN_100m_R2025A_v1.tif"
+                        )
+                    for year in range(2020, 2031)
+                    }
+    gdp_weight = 0.6
+    subnational_name_column = "shapeName"
+    
     path_bus_regions = "bus_regions.shp"
     snapshot_years = [2020, 2030, 2040, 2050] 
 
@@ -168,59 +181,126 @@ if __name__ == "__main__":
     # calculating growth factors:
     proj.loc[:,"SF"] = proj.loc[:,scen] / baseline_annual_demand
     
-    hourly_dem = pd.concat([hourly_dem*f for f in proj["SF"]],
-                    ignore_index=True)
-    hourly_dem = hourly_dem.to_frame()
+    hourly_dem = pd.concat(
+        {year: hourly_dem * factor for year, factor in proj["SF"].items()},
+        names=["year", "hour"])
+    hourly_dem = hourly_dem.to_frame(name="Load")
     
     
     ### split demand across buses
     
-    # FIXME: Temporarily removed to add flexible but basic estimate based on
-    # area (to handle flexible spatial resolutions). This should use geospatial
-    # demand data to disaggregate national or regional totals.
-    # # load population data
-    # doc = fitz.open(path_pop_proj)
+    ### load bus regions and optional subnational demand
+    bus_regions = gpd.read_file(path_processed + path_bus_regions)[["id", "geometry"]]
+    bus_regions["id"] = bus_regions["id"].astype(str)
     
-    # # lists to hold data extracted from population pdf
-    # names = []
-    # population = []
+    if path_subn_dem_data is not None and path_dem_shapefile is not None:
+        # load and process subnational shapefile
+        # FIXME: ensure that province names are handled consistently across
+        # files (here and elsewhere), add checks where useful
+        subnational = gpd.read_file(path_dem_shapefile).to_crs(bus_regions.crs)
+        subnational = subnational[[subnational_name_column, "geometry"]].rename(
+            columns={subnational_name_column: "region"}
+        )
+        subnational["region"] = subnational["region"].replace({
+            "Province 1": "Koshi",
+            "Province 2": "Madhesh",
+            "Sudurpaschim": "Sudurpashchim",
+        })
+        
+        pieces = gpd.overlay(bus_regions, subnational, how="intersection")
+        
+        # load subnational demand
+        regional_demand = pd.read_csv(path_subn_dem_data, index_col=0).T
+        regional_demand.index = regional_demand.index.astype(int)
+        regional_demand = (
+            regional_demand
+            .reindex(regional_demand.index.union(snapshot_years))
+            .sort_index()
+            .interpolate(method="index", limit_direction="both")
+            .loc[snapshot_years]
+        )
+        regional_shares = regional_demand.div(
+            regional_demand.sum(axis=1), axis=0
+        )
+    else:
+        pieces = bus_regions.assign(region="Nepal")
+        regional_shares = pd.DataFrame(
+            1.0, index=snapshot_years, columns=["Nepal"]
+        )
     
-    # # FIXME: take into account projections, not only single year,
-    # # iterating through pages of interest to extract population info
-    # for i in range(203,210):
-    #     page = doc[i]
-    #     page.set_rotation(90) #table is sideways in pdf
-    #     try:
-    #         tabs = page.find_tables()
-    #         tab = tabs[0]
-    #         intermediary_df = tab.to_pandas()
-    #         name = intermediary_df["Province\nand age\ngroups"][1]
-    #         names.append(name+"_0") 
-    #         pop = intermediary_df["2041"][2]
-    #         pop = float(pop.replace(',', ''))
-    #         population.append(pop)
-    #     except:
-    #         logger.error(i)
+    ### sum raster values within each bus/demand region intersection
     
-    # # zip lists into population dataframe
-    # pop_df = pd.DataFrame(zip(names,population), columns= ['Bus','Population'])
-    # pop_df = pop_df.set_index("Bus")
-    # # convert to proportions (percentages of total population)
-    # pop_df = pop_df/pop_df.sum()
+    # cache results so repeated raster years are only processed once
+    @cache
+    def raster_totals(path, band=1):
+        totals = []
+
+        with rasterio.open(path) as src:
+            for geometry in pieces.to_crs(src.crs).geometry:
+                values, _ = raster_mask(
+                    src,
+                    [geometry],
+                    indexes=band,
+                    crop=True,
+                    all_touched=True,
+                    filled=False,
+                )
+                totals.append(values.filled(0).sum())
+
+        return np.asarray(totals)
     
-    # simply take area to split demand (see fixme above)
-    areas = gpd.read_file(path_processed+path_bus_regions)
-    areas.loc[:,"area"] = areas.area
+    # get list of bands
+    with rasterio.open(path_raster_gdp) as src:
+        gdp_bands = {
+            int(description.rsplit("_", 1)[-1]): band
+            for band, description in enumerate(src.descriptions, start=1)
+        }
     
-    pop_df = areas.loc[:,["id","area"]]
-    pop_df.columns = ["id","Population"]
-    pop_df = pop_df.set_index("id")
-    pop_df = pop_df/pop_df.sum()
+    weights_by_year = {}
     
-    ### calculate demand for each province as fraction of total
-    for p in pop_df.index:
-        hourly_dem.loc[:,p+"_load"] = hourly_dem.loc[:,"Load"]*pop_df.loc[p,"Population"]
-    hourly_dem = hourly_dem.drop("Load",axis=1)
+    for year in snapshot_years:
+        gdp_year = min(gdp_bands, key=lambda y: abs(y - year))
+        pop_year = min(paths_raster_pop, key=lambda y: abs(y - year))
+    
+        pieces["gdp"] = raster_totals(path_raster_gdp, gdp_bands[gdp_year])
+        pieces["pop"] = raster_totals(paths_raster_pop[pop_year])
+    
+        # normalize within Nepal or within each subnational region.
+        totals = pieces.groupby("region")[["gdp", "pop"]].transform("sum")
+        fractions = pieces[["gdp", "pop"]].div(totals)
+    
+        pieces["weight"] = (
+            gdp_weight * fractions["gdp"]
+            + (1 - gdp_weight) * fractions["pop"]
+        )
+        # calculate overall weight taking into account bus region (piece)
+        # and subnational region's fraction of demand
+        pieces["weight"] *= pieces["region"].map(regional_shares.loc[year])
+    
+        # recombine pieces belonging to the same bus region
+        weights_by_year[year] = (
+            pieces.groupby("id")["weight"]
+            .sum()
+            .reindex(bus_regions["id"], fill_value=0.0)
+        )
+    
+    bus_weights = pd.DataFrame(weights_by_year).T
+    
+    
+    ### apply weights to timeseries
+    
+    # apply the corresponding year's spatial weights to each hourly total
+    hourly_weights = bus_weights.reindex(
+        hourly_dem.index.get_level_values("year")
+    )
+    hourly_weights.index = hourly_dem.index
+    hourly_dem = (
+        hourly_weights.mul(hourly_dem["Load"], axis=0)
+        .add_suffix("_load")
+        .reset_index(drop=True)
+    )
+    
+    ### save files
     
     # save to file
     hourly_dem.to_csv(path_data+"loads-p_set.csv")

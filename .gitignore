@@ -25,6 +25,12 @@ data/raw_data/grid/pre_built/*
 data/raw_data/climate/*
 !data/raw_data/climate/.gitkeep
 
+data/raw_data/population/*
+!data/raw_data/population/.gitkeep
+
+data/raw_data/gdp/*
+!data/raw_data/gdp/.gitkeep
+
 # Editor and other config 
 **/.spyproject/*
 AGENTS.md

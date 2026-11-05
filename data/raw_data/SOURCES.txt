@@ -64,7 +64,17 @@ Link: NA
 Last accessed: NA
 License: NA
 
+File(s): data/raw_data/population/* (not included in GitHub repo)
+Source: Bondarenko et al. (2025), Constrained estimates of 2015-2030 total number of people per grid square at a resolution of 3 arc (approximately 100m at the equator) R2025A version v1
+Link: https://hub.worldpop.org/geodata/listing?id=135
+Last accessed: 2026-11-04
+License: CC-BY-4.0
 
+File(s): data/raw_data/gdp/* (not included in GitHub repo)
+Source: Kummu et al. (2026), Downscaled gridded global dataset for Gross Domestic Product (GDP) per capita at purchasing power parity (PPP) over 1990-2022 (updated to 1990-2024) v4
+Link: https://zenodo.org/records/18429133
+Last accessed: 2026-11-04
+License: CC-BY-4.0
 
 
 
